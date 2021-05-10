@@ -29,7 +29,7 @@ bm25+ 라이브러리 사용 코드입니다.
   example을 순회하며 `id`, `context_id`를 저장하며 predict하고, 최종적으로 `id` 별로 best score를 구해 해당하는 `context_id`에서 text를 구하여 json에 저장합니다.
 
 
-
+---
 * `BM25Plus` 기준으로 top20의 `context`를 `list`화 하여 `datasets.Dataset`으로 저장한 파일입니다. 압축풀고 `load_from_disk`로 불러오시면 됩니다. 
 
   https://drive.google.com/file/d/1MMjzdhM6PTWiUP5GTvoNl6tXjOy2nmWL/view?usp=sharing

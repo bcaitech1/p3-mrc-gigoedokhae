@@ -22,17 +22,52 @@ from arguments import (
     DataTrainingArguments,
 )
 
+import wandb
+
 logger = logging.getLogger(__name__)
 
 def main():
     # 가능한 arguments 들은 ./arguments.py 나 transformer package 안의 src/transformers/training_args.py 에서 확인 가능합니다.
     # --help flag 를 실행시켜서 확인할 수 도 있습니다.
-
+    
+    #기존 argument를 parsing하는 함수입니다. wandb의 sweep 기능을 위해 주석처리했습니다.
+    """ 
     parser = HfArgumentParser(
         (ModelArguments, DataTrainingArguments, TrainingArguments)
     )
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-
+    """
+    
+    #wandb sweep에 사용할 hyperparameter를 선언해줍니다.
+    default_hyperparameters = dict(
+        batch_size=32,
+        learning_rate=5e-5,
+        weight_decay=0,
+        epochs=1,
+        tokenizer_max_length=384
+    )
+    wandb.init(config=default_hyperparameters, project='test_project') #project명을 바꿔 wandb에서 관리할 수 있습니다.
+    config = wandb.config
+    
+    #기본 argument를 선언합니다. --do_train과 --do_eval을 True로 선언하여 training과 evaluate를 진행합니다.
+    model_args, data_args, training_args = ModelArguments(), DataTrainingArguments(), TrainingArguments(output_dir='./outputs', do_eval=True, do_train=True)
+    
+    #기타 argument 설정입니다. model_name_or_path를 바꿔 모델을 변경할 수 있습니다.
+    #모델 관리를 위해 save_total_limit과 output_dir를 hyperparameter에 따라 다르게 지정합니다. 더 큰 모델을 사용하는 경우 해당 부분이 잘 작동하지 않을 수 있습니다.
+    training_args.seed = 42
+    model_args.model_name_or_path = 'monologg/koelectra-base-v3-discriminator'
+    training_args.logging_steps = 100
+    training_args.save_strategy = 'epoch'
+    training_args.save_total_limit = 1
+    training_args.output_dir = './outputs/koelectra/'+str(config.batch_size)+'_'+str(config.learning_rate)+'_'+str(config.epochs)+'_'+str(config.tokenizer_max_length)
+    
+    #wandb의 config로부터 받아온 각 hyperparameter를 지정합니다.
+    training_args.per_device_train_batch_size = config.batch_size
+    training_args.per_device_eval_batch_size = config.batch_size
+    training_args.learning_rate = config.learning_rate
+    training_args.num_train_epochs = config.epochs
+    data_args.max_seq_length = config.tokenizer_max_length
+    
     print(f"model is from {model_args.model_name_or_path}")
     print(f"data is from {data_args.dataset_name}")
 
@@ -81,7 +116,7 @@ def main():
 
 def run_sparse_embedding():
     retriever = SparseRetrieval(tokenize_fn=tokenize,
-                                data_path="../input/data/",
+                                data_path="/opt/ml/input/data/data/",
                                 context_path="wikipedia_documents.json")
     retriever.get_sparse_embedding()
 

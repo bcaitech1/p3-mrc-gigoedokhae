@@ -25,7 +25,7 @@ def timer(name):
     print(f'[{name}] done in {time.time() - t0:.3f} s')
 
 class SparseRetrieval:
-    def __init__(self, tokenize_fn, data_path="../input/data/", context_path="wikipedia_documents.json"):
+    def __init__(self, tokenize_fn, data_path="/opt/ml/input/data/data/", context_path="wikipedia_documents.json"):
         self.data_path = data_path
         with open(os.path.join(data_path, context_path), "r") as f:
             wiki = json.load(f)
@@ -222,7 +222,7 @@ class SparseRetrieval:
 
 if __name__ == "__main__":
     # Test sparse
-    org_dataset = load_from_disk("data/train_dataset")
+    org_dataset = load_from_disk("/opt/ml/input/data/data/train_dataset")
     full_ds = concatenate_datasets(
         [
             org_dataset["train"].flatten_indices(),

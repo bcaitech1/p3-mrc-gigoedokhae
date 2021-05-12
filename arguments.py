@@ -23,7 +23,7 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
     dataset_name: Optional[str] = field(
-        default="../input/data/train_dataset",
+        default="/opt/ml/input/data/data/train_dataset",
         metadata={"help": "The name of the dataset to use."}
     )
     overwrite_cache: bool = field(

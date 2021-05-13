@@ -1,0 +1,7 @@
+.ipynb_checkpoints/
+.vscode/
+Python-3.6.9/
+__pycache__/
+assets/
+install/
+mecab-0.996-ko-0.9.2/

@@ -1,75 +1,32 @@
 import logging
 import os
 import sys
-from datasets import load_metric, load_from_disk
 
-from transformers import AutoConfig, AutoModelForQuestionAnswering, AutoTokenizer
+from datasets import load_dataset, load_from_disk, concatenate_datasets, load_metric
+from transformers import AutoConfig, AutoTokenizer, AutoModelForQuestionAnswering
+from transformers import DataCollatorWithPadding, EvalPrediction
+from transformers import HfArgumentParser, TrainingArguments
+from arguments import ModelArguments, DataTrainingArguments
 
-from transformers import (
-    DataCollatorWithPadding,
-    EvalPrediction,
-    HfArgumentParser,
-    TrainingArguments,
-    set_seed,
-)
-
-from utils_qa import postprocess_qa_predictions, check_no_error, tokenize
+from utils import set_seed
+from utils_qa import tokenize_into_morphs, check_no_error
+from utils_qa import get_column_names, preprocess_features_of_Dataset, prepare_train_features, prepare_validation_features
+from utils_qa import post_processing_function, postprocess_qa_predictions
 from trainer_qa import QuestionAnsweringTrainer
-from retrieval import SparseRetrieval
-
-from arguments import (
-    ModelArguments,
-    DataTrainingArguments,
-)
-
-import wandb
+from retrieval import BM25SparseRetriever
 
 logger = logging.getLogger(__name__)
 
+
 def main():
-    # 가능한 arguments 들은 ./arguments.py 나 transformer package 안의 src/transformers/training_args.py 에서 확인 가능합니다.
-    # --help flag 를 실행시켜서 확인할 수 도 있습니다.
-    
-    #기존 argument를 parsing하는 함수입니다. wandb의 sweep 기능을 위해 주석처리했습니다.
-    """ 
-    parser = HfArgumentParser(
-        (ModelArguments, DataTrainingArguments, TrainingArguments)
-    )
+    # Arguments
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-    """
-    
-    #wandb sweep에 사용할 hyperparameter를 선언해줍니다.
-    default_hyperparameters = dict(
-        batch_size=32,
-        learning_rate=5e-5,
-        weight_decay=0,
-        epochs=1,
-        tokenizer_max_length=384
-    )
-    wandb.init(config=default_hyperparameters, project='test_project') #project명을 바꿔 wandb에서 관리할 수 있습니다.
-    config = wandb.config
-    
-    #기본 argument를 선언합니다. --do_train과 --do_eval을 True로 선언하여 training과 evaluate를 진행합니다.
-    model_args, data_args, training_args = ModelArguments(), DataTrainingArguments(), TrainingArguments(output_dir='./outputs', do_eval=True, do_train=True)
-    
-    #기타 argument 설정입니다. model_name_or_path를 바꿔 모델을 변경할 수 있습니다.
-    #모델 관리를 위해 save_total_limit과 output_dir를 hyperparameter에 따라 다르게 지정합니다. 더 큰 모델을 사용하는 경우 해당 부분이 잘 작동하지 않을 수 있습니다.
-    training_args.seed = 42
-    model_args.model_name_or_path = 'monologg/koelectra-base-v3-discriminator'
-    training_args.logging_steps = 100
-    training_args.save_strategy = 'epoch'
-    training_args.save_total_limit = 1
-    training_args.output_dir = './outputs/koelectra/'+str(config.batch_size)+'_'+str(config.learning_rate)+'_'+str(config.epochs)+'_'+str(config.tokenizer_max_length)
-    
-    #wandb의 config로부터 받아온 각 hyperparameter를 지정합니다.
-    training_args.per_device_train_batch_size = config.batch_size
-    training_args.per_device_eval_batch_size = config.batch_size
-    training_args.learning_rate = config.learning_rate
-    training_args.num_train_epochs = config.epochs
-    data_args.max_seq_length = config.tokenizer_max_length
-    
     print(f"model is from {model_args.model_name_or_path}")
     print(f"data is from {data_args.dataset_name}")
+
+    # Set seed first.
+    set_seed(training_args.seed)
 
     # Setup logging
     logging.basicConfig(
@@ -77,15 +34,9 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
-
-    # Set the verbosity to info of the Transformers logger (on main process only):
     logger.info("Training/evaluation parameters %s", training_args)
 
-    # Set seed before initializing model.
-    set_seed(training_args.seed)
 
-    datasets = load_from_disk(data_args.dataset_name)
-    print(datasets)
 
     # Load pretrained model and tokenizer
     config = AutoConfig.from_pretrained(
@@ -99,238 +50,75 @@ def main():
         else model_args.model_name_or_path,
         use_fast=True,
     )
+    logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
     model = AutoModelForQuestionAnswering.from_pretrained(
         model_args.model_name_or_path,
         from_tf=bool(".ckpt" in model_args.model_name_or_path),
         config=config,
     )
+    model.to("cuda")
+    print("model uses device:", model.device)
 
-    # train & save sparse embedding retriever if true
-    if data_args.train_retrieval:
-        run_sparse_embedding()
+    # Load dataset from disk
+    datasets = load_from_disk(data_args.dataset_name)
+    last_checkpoint, data_args.max_seq_length = check_no_error(training_args, data_args, tokenizer, datasets)
+    print(datasets)
+    # korquad dataset
+    korquad_datasets = load_dataset("squad_kor_v1")
+    
+    train_dataset = datasets["train"]
+    eval_dataset = datasets["validation"]
+    column_names = train_dataset.column_names
+    # korquad dataset
+    korquad_train_dataset = korquad_datasets["train"]
+    korquad_eval_dataset = korquad_datasets["validation"]
+    column_names = get_column_names()
 
-    # train or eval mrc model
-    if training_args.do_train or training_args.do_eval:
-        run_mrc(data_args, training_args, model_args, datasets, tokenizer, model)
-
-
-def run_sparse_embedding():
-    retriever = SparseRetrieval(tokenize_fn=tokenize,
-                                data_path="/opt/ml/input/data/data/",
-                                context_path="wikipedia_documents.json")
-    retriever.get_sparse_embedding()
-
-
-def run_mrc(data_args, training_args, model_args, datasets, tokenizer, model):
-    # Preprocessing the datasets.
-    # Preprocessing is slighlty different for training and evaluation.
-    if training_args.do_train:
-        column_names = datasets["train"].column_names
-    else:
-        column_names = datasets["validation"].column_names
-
-    question_column_name = "question" if "question" in column_names else column_names[0]
-    context_column_name = "context" if "context" in column_names else column_names[1]
-    answer_column_name = "answers" if "answers" in column_names else column_names[2]
-
-    # Padding side determines if we do (question|context) or (context|question).
-    pad_on_right = tokenizer.padding_side == "right"
-
-    # check if there is an error
-    last_checkpoint, max_seq_length = check_no_error(training_args, data_args, tokenizer, datasets)
-
-    # Training preprocessing
-    def prepare_train_features(examples):
-        # Tokenize our examples with truncation and maybe padding, but keep the overflows using a stride. This results
-        # in one example possible giving several features when a context is long, each of those features having a
-        # context that overlaps a bit the context of the previous feature.
-        tokenized_examples = tokenizer(
-            examples[question_column_name if pad_on_right else context_column_name],
-            examples[context_column_name if pad_on_right else question_column_name],
-            truncation="only_second" if pad_on_right else "only_first",
-            max_length=max_seq_length,
-            stride=data_args.doc_stride,
-            return_overflowing_tokens=True,
-            return_offsets_mapping=True,
-            padding="max_length" if data_args.pad_to_max_length else False,
-        )
-
-        # Since one example might give us several features if it has a long context,
-        # we need a map from a feature to its corresponding example.
-        # This key gives us just that.
-        sample_mapping = tokenized_examples.pop("overflow_to_sample_mapping")
-        # The offset mappings will give us a map from token to character position in the original context. This will
-        # help us compute the start_positions and end_positions.
-        offset_mapping = tokenized_examples.pop("offset_mapping")
-
-        # Let's label those examples!
-        tokenized_examples["start_positions"] = []
-        tokenized_examples["end_positions"] = []
-
-        for i, offsets in enumerate(offset_mapping):
-            # We will label impossible answers with the index of the CLS token.
-            input_ids = tokenized_examples["input_ids"][i]
-            cls_index = input_ids.index(tokenizer.cls_token_id)
-
-            # Grab the sequence corresponding to that example (to know what is the context and what is the question).
-            sequence_ids = tokenized_examples.sequence_ids(i)
-
-            # One example can give several spans, this is the index of the example containing this span of text.
-            sample_index = sample_mapping[i]
-            answers = examples[answer_column_name][sample_index]
-            # print(answers)
-            # If no answers are given, set the cls_index as answer.
-            if len(answers["answer_start"]) == 0:
-                tokenized_examples["start_positions"].append(cls_index)
-                tokenized_examples["end_positions"].append(cls_index)
-            else:
-                # Start/end character index of the answer in the text.
-                start_char = answers["answer_start"][0]
-                end_char = start_char + len(answers["text"][0])
-
-                # Start token index of the current span in the text.
-                token_start_index = 0
-                while sequence_ids[token_start_index] != (1 if pad_on_right else 0):
-                    token_start_index += 1
-
-                # End token index of the current span in the text.
-                token_end_index = len(input_ids) - 1
-                while sequence_ids[token_end_index] != (1 if pad_on_right else 0):
-                    token_end_index -= 1
-
-                # Detect if the answer is out of the span (in which case this feature is labeled with the CLS index).
-                if not (
-                    offsets[token_start_index][0] <= start_char
-                    and offsets[token_end_index][1] >= end_char
-                ):
-                    tokenized_examples["start_positions"].append(cls_index)
-                    tokenized_examples["end_positions"].append(cls_index)
-                else:
-                    # Otherwise move the token_start_index and token_end_index to the two ends of the answer.
-                    # Note: we could go after the last offset if the answer is the last word (edge case).
-                    while (
-                        token_start_index < len(offsets)
-                        and offsets[token_start_index][0] <= start_char
-                    ):
-                        token_start_index += 1
-                    tokenized_examples["start_positions"].append(token_start_index - 1)
-                    while offsets[token_end_index][1] >= end_char:
-                        token_end_index -= 1
-                    tokenized_examples["end_positions"].append(token_end_index + 1)
-
-        return tokenized_examples
-
-    if training_args.do_train:
-        if "train" not in datasets:
-            raise ValueError("--do_train requires a train dataset")
-        train_dataset = datasets["train"]
-
-        # Create train feature from dataset
-        train_dataset = train_dataset.map(
-            prepare_train_features,
-            batched=True,
-            num_proc=data_args.preprocessing_num_workers,
-            remove_columns=column_names,
-            load_from_cache_file=not data_args.overwrite_cache,
-        )
-
-    # Validation preprocessing
-    def prepare_validation_features(examples):
-        # Tokenize our examples with truncation and maybe padding, but keep the overflows using a stride. This results
-        # in one example possible giving several features when a context is long, each of those features having a
-        # context that overlaps a bit the context of the previous feature.
-        tokenized_examples = tokenizer(
-            examples[question_column_name if pad_on_right else context_column_name],
-            examples[context_column_name if pad_on_right else question_column_name],
-            truncation="only_second" if pad_on_right else "only_first",
-            max_length=max_seq_length,
-            stride=data_args.doc_stride,
-            return_overflowing_tokens=True,
-            return_offsets_mapping=True,
-            padding="max_length" if data_args.pad_to_max_length else False,
-        )
-
-        # Since one example might give us several features if it has a long context, we need a map from a feature to
-        # its corresponding example. This key gives us just that.
-        sample_mapping = tokenized_examples.pop("overflow_to_sample_mapping")
-
-        # For evaluation, we will need to convert our predictions to substrings of the context, so we keep the
-        # corresponding example_id and we will store the offset mappings.
-        tokenized_examples["example_id"] = []
-
-        for i in range(len(tokenized_examples["input_ids"])):
-            # Grab the sequence corresponding to that example (to know what is the context and what is the question).
-            sequence_ids = tokenized_examples.sequence_ids(i)
-            context_index = 1 if pad_on_right else 0
-
-            # One example can give several spans, this is the index of the example containing this span of text.
-            sample_index = sample_mapping[i]
-            tokenized_examples["example_id"].append(examples["id"][sample_index])
-
-            # Set to None the offset_mapping that are not part of the context so it's easy to determine if a token
-            # position is part of the context or not.
-            tokenized_examples["offset_mapping"][i] = [
-                (o if sequence_ids[k] == context_index else None)
-                for k, o in enumerate(tokenized_examples["offset_mapping"][i])
-            ]
-        return tokenized_examples
-
+    # Run passage retrieval if do evaluation
     if training_args.do_eval:
-        eval_dataset = datasets["validation"]
-
-        # Validation Feature Creation
+        retriever = BM25SparseRetriever()
+        eval_dataset = retriever.get_standard_dataset_for_QA(eval_dataset, topk=data_args.topk)["validation"] # id, question, context
         eval_dataset = eval_dataset.map(
-            prepare_validation_features,
+            lambda example: prepare_validation_features(example, tokenizer, data_args), # tokenize dataset
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
         )
+    # else, use all datasets for training
+    else:
+        train_dataset = concatenate_datasets([
+            preprocess_features_of_Dataset(train_dataset).flatten_indices(),
+            preprocess_features_of_Dataset(eval_dataset).flatten_indices(),
+            preprocess_features_of_Dataset(korquad_train_dataset).flatten_indices(), # korquad dataset
+            preprocess_features_of_Dataset(korquad_eval_dataset).flatten_indices(), # korquad dataset
+        ])
 
-    # Data collator
-    # We have already padded to max length if the corresponding flag is True, otherwise we need to pad in the data collator.
-    data_collator = (
-        DataCollatorWithPadding(
-            tokenizer, pad_to_multiple_of=8 if training_args.fp16 else None
-        )
+    train_dataset = train_dataset.map(
+        lambda example: prepare_train_features(example, tokenizer, data_args), # tokenize dataset
+        batched=True,
+        num_proc=data_args.preprocessing_num_workers,
+        remove_columns=column_names,
+        load_from_cache_file=not data_args.overwrite_cache,
     )
 
-    # Post-processing:
-    def post_processing_function(examples, features, predictions, training_args):
-        # Post-processing: we match the start logits and end logits to answers in the original context.
-        predictions = postprocess_qa_predictions(
-            examples=examples,
-            features=features,
-            predictions=predictions,
-            max_answer_length=data_args.max_answer_length,
-            output_dir=training_args.output_dir,
-        )
-        # Format the result to the format the metric expects.
-        formatted_predictions = [
-            {"id": k, "prediction_text": v} for k, v in predictions.items()
-        ]
-        if training_args.do_predict:
-            return formatted_predictions
+    # Data collator
+    # if not padded to max length, do pad with data collator.
+    data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8 if training_args.fp16 else None)
 
-        elif training_args.do_eval:
-            references = [
-                {"id": ex["id"], "answers": ex[answer_column_name]}
-                for ex in datasets["validation"]
-            ]
-            return EvalPrediction(predictions=formatted_predictions, label_ids=references)
-
+    # Metric
     metric = load_metric("squad")
 
     def compute_metrics(p: EvalPrediction):
         return metric.compute(predictions=p.predictions, references=p.label_ids)
 
-    # Initialize our Trainer
+    # Initialize Trainer
     trainer = QuestionAnsweringTrainer(
         model=model,
         args=training_args,
-        train_dataset=train_dataset if training_args.do_train else None,
-        eval_dataset=eval_dataset if training_args.do_eval else None,
-        eval_examples=datasets["validation"] if training_args.do_eval else None,
+        train_dataset=train_dataset if training_args.do_train else None,         # tokenized question-context sequence
+        eval_dataset=eval_dataset if training_args.do_eval else None,            # tokenized question-context sequence
+        eval_examples=datasets["validation"] if training_args.do_eval else None, # before tokenization; including answers
         tokenizer=tokenizer,
         data_collator=data_collator,
         post_process_function=post_processing_function,

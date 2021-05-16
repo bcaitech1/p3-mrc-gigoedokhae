@@ -80,7 +80,7 @@ class QuestionAnsweringTrainer(Trainer):
         )
         return metrics
 
-    def predict(self, test_dataset, test_examples, ignore_keys=None):
+    def predict(self, test_dataset, test_examples, max_answer_length, ignore_keys=None):
         test_dataloader = self.get_test_dataloader(test_dataset)
 
         # Temporarily disable metric computation, we will do it in the loop here.
@@ -109,6 +109,6 @@ class QuestionAnsweringTrainer(Trainer):
             )
 
         predictions = self.post_process_function(
-            test_examples, test_dataset, output.predictions, self.args
+            test_examples, test_dataset, output.predictions, max_answer_length, self.args
         )
         return predictions

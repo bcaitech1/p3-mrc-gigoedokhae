@@ -1,5 +1,7 @@
-from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
+from dataclasses import asdict, dataclass, field
+# from transformers import TrainingArguments
+
 
 @dataclass
 class ModelArguments:
@@ -23,7 +25,7 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
     dataset_name: Optional[str] = field(
-        default="/opt/ml/input/data/data/train_dataset",
+        default="/opt/ml/input/data/train_dataset",
         metadata={"help": "The name of the dataset to use."}
     )
     overwrite_cache: bool = field(
@@ -61,11 +63,15 @@ class DataTrainingArguments:
         },
     )
     train_retrieval: bool = field(
-        default=False,#True,
+        default=False,
         metadata={"help": "Whether to train sparse/dense embedding (prepare for retrieval)."},
     )
     eval_retrieval: bool = field(
         default=True,
         metadata={"help":"Whether to run passage retrieval using sparse/dense embedding )."},
+    )
+    topk: int = field(
+        default=1,
+        metadata={"help": "The number of documents to retrieve for each question."},
     )
 

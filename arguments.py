@@ -1,22 +1,40 @@
 from typing import Any, Dict, List, Optional
 from dataclasses import asdict, dataclass, field
-# from transformers import TrainingArguments
+from transformers import TrainingArguments
 
+
+@dataclass
+class TrainingArguments(TrainingArguments):
+    output_dir: str = field(
+        default="/opt/ml/outputs/models/default",
+        metadata={"help": "Path to save model after training."}
+    )
+    save_state_only: bool = field(
+        default=False,
+        metadata={"help": "Whether to save model state only."}
+    )
+    topk: int = field(
+        default=1,
+        metadata={"help": "The number of documents to retrieve for each question."},
+    )
 
 @dataclass
 class ModelArguments:
     """
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
     """
-    model_name_or_path: str = field(
+    model_name: str = field(
         default="bert-base-multilingual-cased",
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+        metadata={"help": "Pretrained model identifier from huggingface.co/models"}
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
     tokenizer_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+    )
+    model_state_dir: Optional[str] = field(
+        default=None, metadata={"help": "Path to pretrained model state"}
     )
 
 @dataclass
@@ -62,16 +80,7 @@ class DataTrainingArguments:
                     "and end predictions are not conditioned on one another."
         },
     )
-    train_retrieval: bool = field(
+    concat_korquad: bool = field(
         default=False,
-        metadata={"help": "Whether to train sparse/dense embedding (prepare for retrieval)."},
+        metadata={"help": "Whether to use koquad v1 datasets for training"},
     )
-    eval_retrieval: bool = field(
-        default=True,
-        metadata={"help":"Whether to run passage retrieval using sparse/dense embedding )."},
-    )
-    topk: int = field(
-        default=1,
-        metadata={"help": "The number of documents to retrieve for each question."},
-    )
-

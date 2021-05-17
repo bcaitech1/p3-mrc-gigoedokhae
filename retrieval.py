@@ -129,9 +129,9 @@ if __name__ == "__main__":
 
     retriever = BM25SparseRetriever()
     # 정확성 테스트 (미구현)
-    with timer("bulk query by exhaustive search"):
-        all_doc_indices = retriever._get_all_doc_indices(dataset["question"], topk=1)
-        df = retriever._get_examples_with_retrieved_context(dataset, all_doc_indices)
-        df["correct"] = df["original_context"] == df["context"]
-        print("correct retrieval result by exhaustive search", df["correct"].sum() / len(df))
+    # with timer("bulk query by exhaustive search"):
+    #     all_doc_indices = retriever._get_all_doc_indices(dataset["question"], topk=1)
+    #     df = retriever._get_examples_with_retrieved_context(dataset, all_doc_indices)
+    #     df["correct"] = df["original_context"] == df["context"]
+    #     print("correct retrieval result by exhaustive search", df["correct"].sum() / len(df))
 

@@ -45,6 +45,7 @@ def tokenize_into_morphs(text):
 
 
 def get_column_names():
+    """["answers", "context", "id", "question", "title"]"""
     return ["answers", "context", "id", "question", "title"]
 
 def preprocess_features_of_Dataset(dataset):

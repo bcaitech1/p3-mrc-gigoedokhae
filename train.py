@@ -3,10 +3,8 @@ import os
 import sys
 
 from datasets import load_dataset, load_from_disk, concatenate_datasets, load_metric
-# from transformers import AutoConfig, AutoTokenizer, AutoModelForQuestionAnswering
 from transformers import DataCollatorWithPadding, EvalPrediction
 from transformers import HfArgumentParser
-# from arguments import ModelArguments, DataTrainingArguments
 
 from utils import set_seed, get_MDT_parsers, get_CTM
 from utils_qa import tokenize_into_morphs, check_no_error, get_column_names

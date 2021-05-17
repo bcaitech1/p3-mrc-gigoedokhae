@@ -3,7 +3,7 @@ import os
 import sys
 
 from datasets import load_from_disk, load_metric
-from transformers import set_seed, DataCollatorWithPadding, EvalPrediction
+from transformers import DataCollatorWithPadding, EvalPrediction
 
 from utils import set_seed, get_MDT_parsers, get_CTM
 from utils_qa import check_no_error, prepare_validation_features

@@ -1,6 +1,11 @@
 import logging
 import torch
-from transformers import AutoConfig, AutoTokenizer, AutoModelForQuestionAnswering
+# from transformers import AutoConfig, AutoTokenizer, AutoModel
+from transformers import (
+    DPRConfig,
+    DPRContextEncoderTokenizerFast, DPRQuestionEncoderTokenizerFast, DPRReaderTokenizerFast,
+    DPRContextEncoder, DPRQuestionEncoder, DPRReader
+) 
 from transformers import HfArgumentParser
 from arguments import ModelArguments, DataTrainingArguments, TrainingArguments
 
@@ -29,32 +34,28 @@ def get_MDT_parsers():
 
 # Get config, tokenizer, model
 def get_CTM(model_args):
-    config = AutoConfig.from_pretrained(
-        model_args.config_name
-        if model_args.config_name
-        else model_args.model_name
-    )
+    config = DPRConfig.from_pretrained(model_args.model_name)
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_args.tokenizer_name
-        if model_args.tokenizer_name
-        else model_args.model_name,
-        use_fast=True
-    )
+    context_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained(model_args.model_name)
+    question_tokenizer = DPRQuestionEncoderTokenizerFast.from_pretrained(model_args.model_name)
 
     if model_args.model_state_dir is None:
-        logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
-        model = AutoModelForQuestionAnswering.from_pretrained(
-            model_args.model_name,
-            from_tf=bool(".ckpt" in model_args.model_name),
-            config=config,
-        )
+        # logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
+        context_encoder = DPRContextEncoder.from_pretrained(model_args.context_encoder_name)
+        question_encoder = DPRQuestionEncoder.from_pretrained(model_args.question_encoder_name)
+        reader = DPRReader.from_pretrained(model_args.reader_name)
     else: # using model state
-        model = AutoModelForQuestionAnswering(config)
-        model.load_state_dict(torch.load(model_args.model_state_dir))
-    model.to("cuda")
+        context_encoder = DPRContextEncoder(config)
+        question_encoder = DPRQuestionEncoder(config)
+        reader = DPRReader(config)
+        context_encoder.load_state_dict(torch.load(model_args.context_encoder_state_dir))
+        question_encoder.load_state_dict(torch.load(model_args.question_encoder_state_dir))
+        reader.load_state_dict(torch.load(model_args.reader_state_dir))
+    context_encoder.to("cuda")
+    question_encoder.to("cuda")
+    reader.to("cuda")
 
-    return config, tokenizer, model
+    return config, tokenizer, context_encoder, question_encoder, reader
 
 
 @contextmanager

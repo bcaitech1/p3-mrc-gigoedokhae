@@ -7,11 +7,11 @@ from transformers import DataCollatorWithPadding, EvalPrediction
 from transformers import HfArgumentParser
 
 from utils import set_seed, get_MDT_parsers, get_CTM
-from utils_qa import tokenize_into_morphs, check_no_error, get_column_names
+from utils_qa import check_no_error, get_column_names
 from utils_qa import preprocess_features_of_Dataset, prepare_train_features, prepare_validation_features
 from utils_qa import post_processing_function, postprocess_qa_predictions
 from trainer_qa import QuestionAnsweringTrainer
-from retrieval import BM25SparseRetriever
+from retrieval import DenseRetriever
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ def main():
     print(f"model is from {model_args.model_name}")
 
     # config, tokenizer and model
-    config, tokenizer, model = get_CTM(model_args)
+    config, tokenizer, p_encoder, q_encoder, reader = get_CTMM(model_args)
     model.train()
     print("model uses device:", model.device)
 
@@ -68,7 +68,7 @@ def main():
     # train/eval dataset
     # type: Dataset
     if training_args.do_eval: # Run passage retrieval (not implemented)
-        retriever = BM25SparseRetriever()
+        retriever = DenseRetriever(tokenizer, p_encoder, q_encoder)
         eval_dataset = retriever.get_standard_dataset_for_QA(eval_dataset, topk=data_args.topk)["validation"] # id, question, context
         eval_dataset = eval_dataset.map(
             lambda example: prepare_validation_features(example, tokenizer, data_args), # tokenize dataset

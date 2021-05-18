@@ -23,18 +23,24 @@ class ModelArguments:
     """
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
     """
-    model_name: str = field(
-        default="bert-base-multilingual-cased",
-        metadata={"help": "Pretrained model identifier from huggingface.co/models"}
-    )
+    context_encoder_name: str = "facebook/dpr-ctx_encoder-single-nq-base"
+    question_encoder_name: str = "facebook/dpr-question_encoder-single-nq-base"
+    reader_name: str = "facebook/dpr-reader-single-nq-base"
+
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
     tokenizer_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
-    model_state_dir: Optional[str] = field(
-        default=None, metadata={"help": "Path to pretrained model state"}
+    context_encoder_state_dir: Optional[str] = field(
+        default=None, metadata={"help": "Path to pretrained context encoder state"}
+    )
+    question_encoder_state_dir: Optional[str] = field(
+        default=None, metadata={"help": "Path to pretrained question encoder state"}
+    )
+    reader_state_dir: Optional[str] = field(
+        default=None, metadata={"help": "Path to pretrained reader state"}
     )
 
 @dataclass

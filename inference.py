@@ -9,7 +9,7 @@ from utils import set_seed, get_MDT_parsers, get_CTM
 from utils_qa import check_no_error, prepare_validation_features
 from utils_qa import post_processing_function, postprocess_qa_predictions
 from trainer_qa import QuestionAnsweringTrainer
-from retrieval import BM25SparseRetriever
+from retrieval import DenseRetriever
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ def main():
     print(f"model is from {model_args.model_name}")
 
     # config, tokenizer and model
-    config, tokenizer, model = get_CTM(model_args)
+    config, tokenizer, p_encoder, q_encoder, reader = get_CTM(model_args)
     model.eval()
     print("model uses device:", model.device)
 
@@ -60,7 +60,7 @@ def main():
 
     # retrieved dataset: id, question, top-k contexts
     # type: DatasetDict with key = ["validation"] (standard dataset format for QA)
-    retriever = BM25SparseRetriever()
+    retriever = DenseRetriever(tokenizer, p_encoder, q_encoder)
     retrieved_dataset = retriever.get_standard_dataset_for_QA(examples, topk=training_args.topk)
 
     # check dataset
@@ -87,10 +87,10 @@ def main():
     def compute_metrics(p: EvalPrediction):
         return metric.compute(predictions=p.predictions, references=p.label_ids)
 
-    # INFERENCER
+    # INFERENCE
     print("Init Trainer...")
     trainer = QuestionAnsweringTrainer(
-        model=model,
+        model=reader,
         args=training_args,
         train_dataset= None,
         eval_dataset=eval_dataset,

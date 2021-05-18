@@ -6,33 +6,35 @@ import pandas as pd
 import numpy as np
 from tqdm.auto import tqdm
 
-from datasets import load_from_disk, concatenate_datasets
+import torch
+from datasets import load_from_disk
 from datasets import Sequence, Value, Features, Dataset, DatasetDict
 
 from utils import timer
-from utils_qa import tokenize_into_morphs
-from bm25 import BM25Vectorizer
+# from utils_qa import tokenize_into_morphs
 
 
-class BM25SparseRetriever:
+class DenseRetriever:
     def __init__(
         self,
-        tokenizer=tokenize_into_morphs,
+        tokenizer,
+        context_encoder,
+        question_encoder,
         corpus_path="/opt/ml/input/data/wikipedia_documents.json",
+        contexts_embedding_path = "/opt/ml/input/data/dense_passage_embedding.bin",
+        questions_embedding_path = "/opt/ml/input/data/dense_question_embedding.bin",
         ):
         self.contexts = self.get_original_contexts(corpus_path)
         print(f"Lengths of unique contexts : {len(self.contexts)}")
 
-        # Transform by vectorizer
-        self.vectorizer = BM25Vectorizer(
-            tokenizer=tokenizer,
-            ngram_range=(1, 2),
-            max_features=100000,
-            dtype=np.float32,
+        self.contexts_embedding = self._get_dense_embedding(
+            contexts_embedding_path,
+            context_encoder,
+            self.contexts
         )
-
-        self.p_embedding = None
-        self._load_sparse_passage_embedding()
+        self.question_encoder = question_encoder
+        self.questions_embedding_path = questions_embedding_path
+        self.questions_embedding = None
 
     def get_original_contexts(self, corpus_path):
         # 중복 시 제거, 한글 미포함 시 제거
@@ -48,45 +50,38 @@ class BM25SparseRetriever:
     def _is_korean_in(self, context):
         return re.search("[가-힇]", context)
 
-    def _load_sparse_passage_embedding(self):
-        p_embedding_path = "/opt/ml/input/data/sparse_passage_embedding.bin"
-        vectorizer_path = "/opt/ml/input/data/bm25_vectorizer.bin"
-        if os.path.isfile(p_embedding_path) and os.path.isfile(vectorizer_path):
-            with open(p_embedding_path, "rb") as f:
-                self.p_embedding = pickle.load(f)
-
-            with open(vectorizer_path, "rb") as f:
-                self.vectorizer = pickle.load(f)
-            print("Passage Embedding Loaded.")
-
+    def _get_dense_embedding(self, path, encoder, texts):
+        if os.path.isfile(embedding_path):
+            with open(embedding_path, "rb") as f:
+                embedding = pickle.load(f)
+            print("Dense Embedding Loaded.")
         else:
-            with timer("Building Passage Embedding..."):
-                self.p_embedding = self.vectorizer.fit_transform(self.contexts)
-            print(self.p_embedding.shape)
+            with timer("Building Dense Embedding..."):
+                with torch.no_grad():
+                    encoder.eval()
+                    tokenized_texts = tokenizer(texts, padding="max_length", truncation=True, return_tensors="pt").to("cuda")
+                    embedding = encoder(**tokenized_texts).to("cpu") # why to cpu? / to("cpu") 대신 detach() ?
+            print(embedding.shape)
 
-            with open(p_embedding_path, "wb") as f:
-                pickle.dump(self.p_embedding, f)
-            with open(vectorizer_path, "wb") as f:
-                pickle.dump(self.vectorizer, f)
+            with open(embedding_path, "wb") as f:
+                pickle.dump(embedding, f)
             print("Passage Embedding Saved.")
 
-    def get_standard_dataset_for_QA(self, examples, topk=1):
+    def retrieve_standard_dataset_for_QA(self, examples, topk=1):
         with timer("Relevant documents exhaustive search."):
             all_doc_indices = self._get_all_doc_indices(examples["question"], topk=topk)
         dataset = self._get_examples_with_retrieved_context(examples, all_doc_indices)
         return self._get_standard_dataset_for_QA(dataset)
 
     def _get_all_doc_indices(self, queries, topk=1):
-        q_embedding = self.vectorizer.transform(queries)
-        
-        all_doc_scores = q_embedding * self.p_embedding.T
-        if not isinstance(all_doc_scores, np.ndarray):
-            all_doc_scores = all_doc_scores.toarray()
-        all_doc_indices = []
-        for doc_scores in all_doc_scores:
-            ranked_indices = np.argsort(doc_scores)[::-1]
-            all_doc_indices.append(ranked_indices.tolist()[:topk])
-        return all_doc_indices
+        self.questions_embedding = self._get_dense_embedding(
+            self.questions_embedding_path,
+            self.question_encoder,
+            queries
+        )
+        dot_prod_scores = torch.matmul(self.questions_embedding, torch.transpose(self.contexts_embedding, 0, 1))
+        sorted_doc_indices = torch.argsort(dot_prod_scores, dim=1, decsending=True).squeeze()
+        return sorted_doc_indices[:topk]
 
     def _get_examples_with_retrieved_context(self, examples, all_doc_indices):
         dataset = []
@@ -116,18 +111,19 @@ class BM25SparseRetriever:
 
 
 if __name__ == "__main__":
+    pass
     # Test sparse
-    org_datasets = load_from_disk("/opt/ml/input/data/train_dataset")
-    dataset = concatenate_datasets(
-        [
-            org_datasets["train"].flatten_indices(),
-            org_datasets["validation"].flatten_indices(),
-        ]
-    ) # train dev 를 합친 4192 개 질문에 대해 모두 테스트
-    print("*"*40, "query dataset", "*"*40)
-    print(dataset)
+    # org_datasets = load_from_disk("/opt/ml/input/data/train_dataset")
+    # dataset = concatenate_datasets(
+    #     [
+    #         org_datasets["train"].flatten_indices(),
+    #         org_datasets["validation"].flatten_indices(),
+    #     ]
+    # ) # train dev 를 합친 4192 개 질문에 대해 모두 테스트
+    # print("*"*40, "query dataset", "*"*40)
+    # print(dataset)
 
-    retriever = BM25SparseRetriever()
+    # retriever = DPRRetriever()
     # 정확성 테스트 (미구현)
     # with timer("bulk query by exhaustive search"):
     #     all_doc_indices = retriever._get_all_doc_indices(dataset["question"], topk=1)

@@ -70,7 +70,7 @@ class BM25SparseRetriever:
                 pickle.dump(self.vectorizer, f)
             print("Passage Embedding Saved.")
 
-    def get_standard_dataset_for_QA(self, examples, topk=1):
+    def retrieve_standard_dataset_for_QA(self, examples, topk=1):
         with timer("Relevant documents exhaustive search."):
             all_doc_indices = self._get_all_doc_indices(examples["question"], topk=topk)
         dataset = self._get_examples_with_retrieved_context(examples, all_doc_indices)

@@ -1,4 +1,5 @@
 import logging
+import os
 import torch
 from transformers import AutoConfig, AutoTokenizer, AutoModelForQuestionAnswering
 from transformers import HfArgumentParser
@@ -32,26 +33,26 @@ def get_CTM(model_args):
     config = AutoConfig.from_pretrained(
         model_args.config_name
         if model_args.config_name
-        else model_args.model_name
+        else model_args.model_path
     )
 
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name
         if model_args.tokenizer_name
-        else model_args.model_name,
+        else model_args.model_path,
         use_fast=True
     )
 
-    if model_args.model_state_dir is None:
+    if model_args.model_state_path == "no"\
+    or not os.path.isdir(model_args.model_state_path): # "is None" not works.
         logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
         model = AutoModelForQuestionAnswering.from_pretrained(
-            model_args.model_name,
-            from_tf=bool(".ckpt" in model_args.model_name),
+            model_args.model_path,
             config=config,
         )
     else: # using model state
-        model = AutoModelForQuestionAnswering(config)
-        model.load_state_dict(torch.load(model_args.model_state_dir))
+        model = AutoModelForQuestionAnswering.from_config(config)
+        model.load_state_dict(torch.load(model_args.model_state_path))
     model.to("cuda")
 
     return config, tokenizer, model

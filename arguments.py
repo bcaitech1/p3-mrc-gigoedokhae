@@ -4,37 +4,23 @@ from transformers import TrainingArguments
 
 
 @dataclass
-class TrainingArguments(TrainingArguments):
-    output_dir: str = field(
-        default="/opt/ml/outputs/models/default",
-        metadata={"help": "Path to save model after training."}
-    )
-    save_state_only: bool = field(
-        default=False,
-        metadata={"help": "Whether to save model state only."}
-    )
-    topk: int = field(
-        default=1,
-        metadata={"help": "The number of documents to retrieve for each question."},
-    )
-
-@dataclass
 class ModelArguments:
     """
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
     """
-    model_name: str = field(
-        default="bert-base-multilingual-cased",
+    model_path: str = field(
+        default="xlm-roberta-large",#bert-base-multilingual-cased",
         metadata={"help": "Pretrained model identifier from huggingface.co/models"}
     )
+    model_state_path: Optional[str] = field(
+        default="no",
+        metadata={"help": "Path to pretrained model state"}
+    )
     config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+        default=None, metadata={"help": "Pretrained config name or path if not the same as model_path"}
     )
     tokenizer_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
-    )
-    model_state_dir: Optional[str] = field(
-        default=None, metadata={"help": "Path to pretrained model state"}
+        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_path"}
     )
 
 @dataclass
@@ -42,7 +28,7 @@ class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
-    dataset_name: Optional[str] = field(
+    dataset_path: Optional[str] = field(
         default="/opt/ml/input/data/train_dataset",
         metadata={"help": "The name of the dataset to use."}
     )
@@ -80,7 +66,22 @@ class DataTrainingArguments:
                     "and end predictions are not conditioned on one another."
         },
     )
-    concat_korquad: bool = field(
+    train_korquad: bool = field(
         default=False,
         metadata={"help": "Whether to use koquad v1 datasets for training"},
+    )
+
+@dataclass
+class TrainingArguments(TrainingArguments):
+    output_dir: str = field(
+        default="/opt/ml/outputs/debug",
+        metadata={"help": "Path to save model after training."}
+    )
+    save_state_only: bool = field(
+        default=False,
+        metadata={"help": "Whether to save model state only."}
+    )
+    topk: int = field(
+        default=1,
+        metadata={"help": "The number of documents to retrieve for each question."},
     )

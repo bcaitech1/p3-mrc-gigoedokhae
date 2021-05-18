@@ -44,8 +44,8 @@ def main():
     # arguments and initialization
     model_args, data_args, training_args = get_MDT_parsers()
     initialize(data_args, training_args)
-    print(f"data is from {data_args.dataset_name}")
-    print(f"model is from {model_args.model_name}")
+    print(f"data is from {data_args.dataset_path}")
+    print(f"model is from {model_args.model_path}")
 
     # config, tokenizer and model
     config, tokenizer, model = get_CTM(model_args)
@@ -55,13 +55,13 @@ def main():
     # DATA
     # examples: id, question
     # type: Dataset <- DatasetDict["validation"]
-    examples = load_from_disk(data_args.dataset_name)["validation"]
+    examples = load_from_disk(data_args.dataset_path)["validation"]
     print(examples)
 
     # retrieved dataset: id, question, top-k contexts
     # type: DatasetDict with key = ["validation"] (standard dataset format for QA)
     retriever = BM25SparseRetriever()
-    retrieved_dataset = retriever.get_standard_dataset_for_QA(examples, topk=training_args.topk)
+    retrieved_dataset = retriever.retrieve_standard_dataset_for_QA(examples, topk=training_args.topk)
 
     # check dataset
     last_checkpoint, data_args.max_seq_length = check_no_error(training_args, data_args, tokenizer, retrieved_dataset)
@@ -87,7 +87,7 @@ def main():
     def compute_metrics(p: EvalPrediction):
         return metric.compute(predictions=p.predictions, references=p.label_ids)
 
-    # INFERENCER
+    # INFERENCE
     print("Init Trainer...")
     trainer = QuestionAnsweringTrainer(
         model=model,

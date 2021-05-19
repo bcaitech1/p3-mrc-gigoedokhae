@@ -50,7 +50,7 @@ def main():
     # config, tokenizer and model
     config, tokenizer, model = get_CTM(model_args)
     model.eval()
-    print("model uses device:", model.device)
+    # print("model uses device:", model.device)
 
     # DATA
     # examples: id, question
@@ -64,7 +64,7 @@ def main():
     retrieved_dataset = retriever.retrieve_standard_dataset_for_QA(examples, topk=training_args.topk)
 
     # check dataset
-    last_checkpoint, data_args.max_seq_length = check_no_error(training_args, data_args, tokenizer, retrieved_dataset)
+    # last_checkpoint, data_args.max_seq_length = check_no_error(training_args, data_args, tokenizer, retrieved_dataset)
 
     # eval dataset: tokenized (question + context) sequences <- prepare_validation_features
     column_names = retrieved_dataset["validation"].column_names

@@ -9,7 +9,7 @@ class ModelArguments:
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
     """
     model_path: str = field(
-        default="xlm-roberta-large",#bert-base-multilingual-cased",
+        default="xlm-roberta-large",
         metadata={"help": "Pretrained model identifier from huggingface.co/models"}
     )
     model_state_path: Optional[str] = field(

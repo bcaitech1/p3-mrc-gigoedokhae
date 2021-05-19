@@ -165,6 +165,7 @@ def main():
         trainer.state.save_to_json(
             os.path.join(training_args.output_dir, "trainer_state.json")
         )
+    print("model saved.")
 
     # EVALUATION
     if training_args.do_eval: # not implemented

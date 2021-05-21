@@ -18,12 +18,6 @@ from glob import glob
 from pathlib import Path
 
 
-
-from korbert.src_tokenizer.tokenization_morp import whitespace_tokenize, BasicTokenizer, BertTokenizer
-from pytorch_pretrained_bert.modeling import BertForQuestionAnswering, BertConfig
-
-
-
 __all__ = [
     "get_MDT_parsers", "get_CTM",
     "timer", "set_seed", "increment_path",
@@ -38,53 +32,30 @@ def get_MDT_parsers():
 
 # Get config, tokenizer, model
 def get_CTM(model_args):
-    model_name = "bert-large-cased"
-    model_path = "/opt/ml/code/korbert/pytorch_model.bin"
-    config_path = "/opt/ml/code/korbert/bert_config.json"
+    config = AutoConfig.from_pretrained(
+        model_args.config_name
+        if model_args.config_name
+        else model_args.model_path
+    )
 
-    config = BertConfig(config_path)
-    model = BertForQuestionAnswering(config)
-    state_dict = torch.load(os.path.join(model_name, model_path))
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_args.tokenizer_name
+        if model_args.tokenizer_name
+        else model_args.model_path,
+        use_fast=True
+    )
 
-    del_list = ["cls.predictions.bias", "cls.predictions.transform.dense.weight", "cls.predictions.transform.dense.bias", "cls.predictions.transform.LayerNorm.weight", "cls.predictions.transform.LayerNorm.bias", "cls.predictions.decoder.weight", "cls.seq_relationship.weight", "cls.seq_relationship.bias"]
-    for elt in del_list:
-        state_dict.pop(elt)
-    state_dict["qa_outputs.weight"] = torch.zeros([2, 768])
-    state_dict["qa_outputs.bias"] = torch.zeros([2])
-
-    model.load_state_dict(state_dict)
+    if model_args.model_state_path == "no"\
+    or not os.path.isdir(model_args.model_state_path): # "is None" not works.
+        logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
+        model = CustomXLMRoberta.from_pretrained(
+            model_args.model_path,
+            config=config,
+        )
+    else: # using model state
+        model = CustomXLMRoberta.from_config(config)
+        model.load_state_dict(torch.load(model_args.model_state_path))
     model.to("cuda")
-
-    vocab_path = "/opt/ml/code/korbert/vocab.korean_morp.list"
-    tokenizer_path = os.path.join(model_name, vocab_path)
-    tokenizer = BertTokenizer.from_pretrained(tokenizer_path)
-
-
-
-    # config = AutoConfig.from_pretrained(
-    #     model_args.config_name
-    #     if model_args.config_name
-    #     else model_args.model_path
-    # )
-
-    # tokenizer = AutoTokenizer.from_pretrained(
-    #     model_args.tokenizer_name
-    #     if model_args.tokenizer_name
-    #     else model_args.model_path,
-    #     use_fast=True
-    # )
-
-    # if model_args.model_state_path == "no"\
-    # or not os.path.isdir(model_args.model_state_path): # "is None" not works.
-    #     logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
-    #     model = CustomXLMRoberta.from_pretrained(
-    #         model_args.model_path,
-    #         config=config,
-    #     )
-    # else: # using model state
-    #     model = CustomXLMRoberta.from_config(config)
-    #     model.load_state_dict(torch.load(model_args.model_state_path))
-    # model.to("cuda")
 
     return config, tokenizer, model
 

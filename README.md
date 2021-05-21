@@ -22,7 +22,7 @@ NameError: name 'Tagger' is not defined 해결
 
 ## command를 통한 실행 예시
 - train: `python train.py --output_dir /opt/ml/outputs/models/debug`  
-- infer: `python inference.py --output_dir /opt/ml/outputs/test_dataset --model_path /opt/ml/outputs/models/<certain model dir>`
+- infer: `python inference.py --output_dir /opt/ml/outputs/preds/last --topk 40`
 
 ## 설정
 - 주요 parser 설정(run.ipynb)

@@ -8,6 +8,7 @@ Open-Domain Question Answering 을 수행하는 inference 코드 입니다.
 import logging
 import os
 import sys
+import re
 from datasets import load_metric, load_from_disk, Sequence, Value, Features, Dataset, DatasetDict
 
 from transformers import AutoConfig, AutoModelForQuestionAnswering, AutoTokenizer
@@ -60,7 +61,6 @@ def main():
     set_seed(training_args.seed)
 
     datasets = load_from_disk(data_args.dataset_name)
-    print(datasets)
 
     # Load pretrained model and tokenizer
     config = AutoConfig.from_pretrained(
@@ -93,13 +93,13 @@ def run_sparse_retrieval(datasets, training_args):
     #### retreival process ####
 
     retriever = SparseRetrieval(tokenize_fn=tokenize,
-                                data_path="../input/data",
+                                data_path="../input/data/data",
                                 context_path="wikipedia_documents.json")
     retriever.get_sparse_embedding()
     df = retriever.retrieve(datasets['validation'])
 
     # faiss retrieval
-    # df = retriever.retrieve_faiss(dataset['validation'])
+    #df = retriever.retrieve_faiss(datasets['validation'])
 
     if training_args.do_predict: # test data 에 대해선 정답이 없으므로 id question context 로만 데이터셋이 구성됩니다.
         f = Features({'context': Value(dtype='string', id=None),
@@ -206,6 +206,7 @@ def run_mrc(data_args, training_args, model_args, datasets, tokenizer, model):
         formatted_predictions = [
             {"id": k, "prediction_text": v} for k, v in predictions.items()
         ]
+
         if training_args.do_predict:
             return formatted_predictions
 

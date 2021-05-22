@@ -23,12 +23,10 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
     dataset_name: Optional[str] = field(
-        default="../input/data/train_dataset",
-        metadata={"help": "The name of the dataset to use."}
+        default="../input/data/data/train_dataset", metadata={"help": "The name of the dataset to use."}
     )
     overwrite_cache: bool = field(
-        default=False,
-        metadata={"help": "Overwrite the cached training and evaluation sets"}
+        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
@@ -61,11 +59,10 @@ class DataTrainingArguments:
         },
     )
     train_retrieval: bool = field(
-        default=False,#True,
+        default=True,
         metadata={"help": "Whether to train sparse/dense embedding (prepare for retrieval)."},
     )
     eval_retrieval: bool = field(
         default=True,
         metadata={"help":"Whether to run passage retrieval using sparse/dense embedding )."},
     )
-
